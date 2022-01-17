@@ -21,6 +21,7 @@ Fine-tuning the library models for question answering.
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -570,6 +571,10 @@ def main():
             # During Feature creation dataset samples might increase, we will select required samples again
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
 
+        if training_args.dataloader_drop_last:
+            data_lens = len(eval_dataset) - (len(eval_dataset) % training_args.per_device_eval_batch_size)
+            eval_dataset = eval_dataset.select(range(data_lens))
+
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
     # collator.
@@ -635,10 +640,13 @@ def main():
             trainer.model = model_eval
         else:
             trainer.model = model
+        start = time.time()
         metrics = trainer.evaluate()
+        avg_time = (time.time() - start)/data_lens
         if save_metrics:
             trainer.save_metrics("eval", metrics)
         logger.info("{}: {}".format(metric_name, metrics.get(metric_name)))
+        logger.info("Throughtput: {} samples/sec".format(1/avg_time))
         return metrics.get(metric_name)
 
     def eval_func(model):
