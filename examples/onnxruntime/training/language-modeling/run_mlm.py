@@ -49,6 +49,7 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
+from optimum.onnxruntime import ORTTrainer
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -113,6 +114,12 @@ class ModelArguments:
                 "Will use the token generated when running `transformers-cli login` (necessary to use this script "
                 "with private models)."
             )
+        },
+    )
+    use_ort: bool = field(
+        default=True,
+        metadata={
+            "help": "disable onnxruntime to accelerate training"
         },
     )
 
@@ -534,7 +541,11 @@ def main():
     )
 
     # Initialize our Trainer
-    trainer = Trainer(
+    if model_args.use_ort:
+        trainer_class = ORTTrainer
+    else:
+        trainer_class = Trainer
+    trainer = trainer_class(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
