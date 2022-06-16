@@ -122,6 +122,12 @@ class ModelArguments:
         },
     )
 
+    use_ort_fused_adam: bool = field(
+        default=False,
+        metadata={
+            "help": "disable onnxruntime to accelerate training"
+        },
+    )
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
             raise ValueError(
@@ -542,6 +548,7 @@ def main():
     # Initialize our Trainer
     if model_args.use_ort:
         trainer_class = ORTTrainer
+        training_args.use_ort_fused_adam = model_args.use_ort_fused_adam
     else:
         trainer_class = Trainer
     trainer = trainer_class(

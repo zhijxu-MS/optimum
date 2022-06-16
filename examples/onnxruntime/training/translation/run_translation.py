@@ -104,6 +104,12 @@ class ModelArguments:
         },
     )
 
+    use_ort_fused_adam: bool = field(
+        default=False,
+        metadata={
+            "help": "disable onnxruntime to accelerate training"
+        },
+    )
 
 @dataclass
 class DataTrainingArguments:
@@ -531,6 +537,7 @@ def main():
     # Initialize our Trainer
     if model_args.use_ort:
         trainer_class = ORTSeq2SeqTrainer
+        training_args.use_ort_fused_adam = model_args.use_ort_fused_adam
     else:
         trainer_class = Trainer
     trainer = trainer_class(
