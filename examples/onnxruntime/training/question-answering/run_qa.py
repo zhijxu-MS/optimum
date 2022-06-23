@@ -46,6 +46,7 @@ from transformers.utils.versions import require_version
 
 from trainer_qa import QuestionAnsweringORTTrainer
 from utils_qa import postprocess_qa_predictions
+from transformers.trainer import Trainer
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -86,6 +87,18 @@ class ModelArguments:
         metadata={
             "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
             "with private models)."
+        },
+    )
+    use_ort: bool = field(
+        default=True,
+        metadata={
+            "help": "disable onnxruntime to accelerate training"
+        },
+    )
+    use_ort_fused_adam: bool = field(
+        default=False,
+        metadata={
+            "help": "disable onnxruntime to accelerate training"
         },
     )
 
@@ -568,7 +581,12 @@ def main():
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     # Initialize our Trainer
-    trainer = QuestionAnsweringORTTrainer(
+    if model_args.use_ort:
+        trainer_class = QuestionAnsweringORTTrainer
+        training_args.use_ort_fused_adam = model_args.use_ort_fused_adam
+    else:
+        trainer_class = Trainer
+    trainer = trainer_class(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,

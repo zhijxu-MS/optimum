@@ -195,6 +195,12 @@ class ModelArguments:
             "help": "disable onnxruntime to accelerate training"
         },
     )
+    use_ort_fused_adam: bool = field(
+        default=False,
+        metadata={
+            "help": "disable onnxruntime to accelerate training"
+        },
+    )
 
 
 def main():
@@ -479,6 +485,7 @@ def main():
     # Initialize Trainer
     if model_args.use_ort:
         trainer_class = ORTTrainer
+        training_args.use_ort_fused_adam = model_args.use_ort_fused_adam
     else:
         trainer_class = Trainer
     trainer = trainer_class(
