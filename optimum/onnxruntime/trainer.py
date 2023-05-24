@@ -207,7 +207,6 @@ class ORTFeaturesManager:
         else:
             return False
 
-
 class ORTTrainer(Trainer):
     """
     ORTTrainer is a simple but feature-complete training and eval loop for ONNX Runtime, optimized for 🤗 Transformers.
@@ -461,7 +460,7 @@ class ORTTrainer(Trainer):
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
-        from torch_ort import ORTModule
+        from torch_ort import ORTModule, DebugOptions
 
         self._train_batch_size = batch_size
 
@@ -525,7 +524,11 @@ class ORTTrainer(Trainer):
 
         # Wrap the model with `ORTModule`
         logger.info("Wrap ORTModule for ONNX Runtime training.")
-        model = ORTModule(self.model)
+        if os.environ.get("DISABLE_ORTMODULE", "0") != "1":
+            save_onnx = os.environ.get("SAVE_ONNX", "0") == "1"
+            model = ORTModule(self.model, DebugOptions(save_onnx=save_onnx, onnx_prefix="zhijxu"))
+        else:
+            model = self.model
         self.model_wrapped = model
 
         if args.deepspeed:
@@ -715,6 +718,47 @@ class ORTTrainer(Trainer):
 
             step = -1
             for step, inputs in enumerate(train_dataloader):
+                if os.environ.get("VIZTRACER", "0") != "0":
+                    assert (
+                        os.environ["CUDA_LAUNCH_BLOCKING"] == "1"
+                    ), "CUDA_LAUNCH_BLOCKING must be set to 1 with viztracer"
+                    if step == int(os.environ.get("START_STEP", 10)):
+                        from viztracer import VizTracer
+
+                        is_ort = os.environ.get("DISABLE_ORTMODULE", "0") != "1"
+                        if is_ort:
+                            result_prefix = "ort"
+                        else:
+                            result_prefix = "torch"
+                        tracer = VizTracer(output_file=f"profile_result/{result_prefix}_trace_{os.getpid()}.json")
+                        from termcolor import cprint
+
+                        cprint("viztracer start", "red")
+                        tracer.start()
+                    elif step == int(os.environ.get("END_STEP", 20)):
+                        tracer.stop()
+                        tracer.save()
+                        cprint("viztracer stop", "red")
+                        sys.exit(0)
+
+                if os.environ.get("NSYS", "0") != "0":
+                    assert (
+                        os.environ.get("CUDA_LAUNCH_BLOCKING", 0) != "1"
+                    ), "CUDA_LAUNCH_BLOCKING must be not set to 1 with nsys"
+                    if step == int(os.environ.get("START_STEP", 10)):
+                        from termcolor import cprint
+
+                        cprint("nsys start", "red")
+                        torch.cuda.cudart().cudaProfilerStart()
+                    elif step == int(os.environ.get("END_STEP", 20)):
+                        torch.cuda.cudart().cudaProfilerStop()
+                        cprint("nsys stop", "red")
+
+                if os.environ.get("VSCODE_ATTACH", "0") != "0":
+                    pass
+
+                torch.cuda.nvtx.range_push(f"step_{step}")
+
                 total_batched_samples += 1
                 if rng_to_sync:
                     self._load_rng_state(resume_from_checkpoint)
@@ -757,7 +801,7 @@ class ORTTrainer(Trainer):
                     tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
-
+                torch.cuda.nvtx.range_push("optimizer")
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
                 if self.deepspeed:
                     self.deepspeed.step()
@@ -819,6 +863,8 @@ class ORTTrainer(Trainer):
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
+                torch.cuda.nvtx.range_pop()
+                torch.cuda.nvtx.range_pop()
             if step < 0:
                 logger.warning(
                     f"There seems to be not a single sample in your train dataloader, stopping training at step"
