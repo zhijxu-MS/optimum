@@ -117,7 +117,14 @@ class ModelArguments:
             )
         },
     )
-
+    use_peft: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "using LoRA or not, it's false by default"
+            )
+        },
+    )
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
             raise ValueError(
@@ -399,6 +406,17 @@ def main():
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
+    if model_args.use_peft:
+        from peft import LoraConfig, TaskType, get_peft_model
+
+        peft_config = LoraConfig(
+            task_type=TaskType.CAUSAL_LM,
+            inference_mode=False,
+            r=2,
+            lora_alpha=32,
+            lora_dropout=0.1,
+        )
+        model = get_peft_model(model, peft_config)
     model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.
