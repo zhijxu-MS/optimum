@@ -545,6 +545,7 @@ class ORTTrainer(Trainer):
                 )
 
             self.model = model
+            # self.model = torch.compile(self.model, backend=self.args.torch_compile_backend, mode=self.args.torch_compile_mode, dynamic=True)
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
             )
