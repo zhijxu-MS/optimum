@@ -457,6 +457,25 @@ class ORTTrainer(Trainer):
             ignore_keys_for_eval=ignore_keys_for_eval,
         )
 
+    def get_tensor(self):
+        import gc
+        res = list()
+        for obj in gc.get_objects():
+            try:
+                if torch.is_tensor(obj) and obj.is_cuda:
+                    res.append(obj)
+            except:
+                pass
+        return res
+
+    def get_parameter(self):
+        tensors = self.get_tensor()
+        return [t for t in tensors if isinstance(t, torch.nn.parameter.Parameter)]
+
+    def get_all_tensor_byte_num(self):
+        tensors = self.get_tensor()
+        return sum([t.numel() * t.element_size() for t in tensors])
+
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
     ):
